@@ -10,7 +10,7 @@ public record TransactionDto(
 		String transactionType,
 		String merchant,
 		String category,
-		ZonedDateTime transactionTime,
+		ZonedDateTime transactionDate,
 		String paymentMethod,
 		String source,
 		String notes,
