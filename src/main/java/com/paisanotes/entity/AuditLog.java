@@ -25,7 +25,10 @@ public class AuditLog {
 	private User user;
 
 	@Column(name = "entity_type", nullable = false)
-	private String entityId;
+	private String entityType;
+
+	@Column(name = "entity_id", nullable = false)
+	private UUID entityId;
 
 	@Column(name = "action_type", nullable = false)
 	private String actionType;
