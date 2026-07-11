@@ -23,6 +23,9 @@ public class User {
 	private String passwordHash;
 
 	@Column(nullable = false)
+	private String name;
+
+	@Column(nullable = false)
 	private ZonedDateTime createdAt;
 
 	@PrePersist
