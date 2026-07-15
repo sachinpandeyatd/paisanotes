@@ -6,6 +6,7 @@ import com.paisanotes.security.JwtAuthenticationFilter;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.data.auditing.DateTimeProvider;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.AuthenticationProvider;
 import org.springframework.security.authentication.dao.DaoAuthenticationProvider;
@@ -20,6 +21,9 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 
+import java.time.ZonedDateTime;
+import java.util.Optional;
+
 @Configuration
 @EnableWebSecurity
 @RequiredArgsConstructor
@@ -31,7 +35,7 @@ public class SecurityConfig {
 	public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception{
 		http.csrf(AbstractHttpConfigurer::disable)
 				.authorizeHttpRequests(auth -> auth
-						.requestMatchers("/api/v1/auth/**").permitAll()
+						.requestMatchers("/api/v1/**").permitAll()
 						.anyRequest().authenticated()
 				)
 				.sessionManagement(session -> session
@@ -59,5 +63,10 @@ public class SecurityConfig {
 	@Bean
 	public AuthenticationManager authenticationManager(AuthenticationConfiguration config) throws Exception {
 		return config.getAuthenticationManager();
+	}
+
+	@Bean
+	public DateTimeProvider zonedDateTimeProvider() {
+		return () -> Optional.of(ZonedDateTime.now());
 	}
 }

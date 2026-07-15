@@ -24,7 +24,7 @@ import java.util.stream.Collectors;
 public class SyncService {
 	private final TransactionRepository transactionRepository;
 	private final UserRepository userRepository;
-	private AuditLogRepository auditLogRepository;
+	private final AuditLogRepository auditLogRepository;
 
 	public SyncPullResponse pull(UUID id, ZonedDateTime lastSyncTime){
 		List<Transaction> changedTransactions = transactionRepository.findModifiedAfter(id, lastSyncTime);

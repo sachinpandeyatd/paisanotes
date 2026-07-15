@@ -13,3 +13,6 @@ spring:
 
 jwt:
   expiration: 86400000 #1 Day
+
+server:
+  address=0.0.0.0

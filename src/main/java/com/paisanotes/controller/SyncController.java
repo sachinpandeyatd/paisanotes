@@ -50,4 +50,12 @@ public class SyncController {
 
 		return ResponseEntity.ok(response);
 	}
+
+	@GetMapping("/hello")
+	public String hello(
+			@RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME)ZonedDateTime lastSync,
+			Authentication authentication
+	){
+		return "Hello";
+	}
 }
