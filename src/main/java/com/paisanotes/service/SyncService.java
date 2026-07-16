@@ -1,14 +1,11 @@
 package com.paisanotes.service;
 
 import com.paisanotes.dto.*;
-import com.paisanotes.entity.AuditLog;
-import com.paisanotes.entity.Transaction;
-import com.paisanotes.entity.User;
-import com.paisanotes.repository.AuditLogRepository;
-import com.paisanotes.repository.TransactionRepository;
-import com.paisanotes.repository.UserRepository;
+import com.paisanotes.entity.*;
+import com.paisanotes.repository.*;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.ZoneId;
 import java.time.ZonedDateTime;
@@ -22,153 +19,260 @@ import java.util.stream.Collectors;
 @Service
 @RequiredArgsConstructor
 public class SyncService {
+
 	private final TransactionRepository transactionRepository;
-	private final UserRepository userRepository;
+	private final PersonRepository personRepository;
+	private final LoanRepository loanRepository;
+	private final EmiRepository emiRepository;
 	private final AuditLogRepository auditLogRepository;
+	private final UserRepository userRepository;
 
-	public SyncPullResponse pull(UUID id, ZonedDateTime lastSyncTime){
-		List<Transaction> changedTransactions = transactionRepository.findModifiedAfter(id, lastSyncTime);
-		List<TransactionDto> transactionDtos = changedTransactions.stream()
-				.map(this::mapToDto).collect(Collectors.toList());
 
-		List<AuditLog> newLogs = auditLogRepository.findByUserIdAndCreatedAtGreaterThan(id, lastSyncTime);
-		List<AuditLogDto> logDtos = newLogs.stream().map(this::mapLogToDto).collect(Collectors.toList());
+	public SyncPullResponse pull(UUID userId, ZonedDateTime lastSyncTime) {
 
-		return new SyncPullResponse(ZonedDateTime.now(ZoneId.of("UTC")), transactionDtos, logDtos);
+		List<TransactionDto> txns = transactionRepository.findModifiedAfter(userId, lastSyncTime).stream()
+				.map(this::mapTransactionToDto).toList();
+
+		List<PersonDto> people = personRepository.findModifiedAfter(userId, lastSyncTime).stream()
+				.map(this::mapPersonToDto).toList();
+
+		List<LoanDto> loans = loanRepository.findModifiedAfter(userId, lastSyncTime).stream()
+				.map(this::mapLoanToDto).toList();
+
+		List<EmiDto> emis = emiRepository.findModifiedAfter(userId, lastSyncTime).stream()
+				.map(this::mapEmiToDto).toList();
+
+		List<AuditLogDto> logs = auditLogRepository.findByUserIdAndCreatedAtGreaterThan(userId, lastSyncTime).stream()
+				.map(this::mapLogToDto).toList();
+
+		return new SyncPullResponse(ZonedDateTime.now(ZoneId.of("UTC")), txns, logs, people, loans, emis);
 	}
 
-	private TransactionDto mapToDto(Transaction entity) {
-		return new TransactionDto(
-				entity.getId(),
-				entity.getAmount(),
-				entity.getTransactionType(),
-				entity.getMerchant(),
-				entity.getCategory(),
-				entity.getTransactionDate(),
-				entity.getPaymentMethod(),
-				entity.getSource(),
-				entity.getNotes(),
-				entity.getCreatedAt(),
-				entity.getUpdatedAt(),
-				entity.isDeleted()
-		);
+	@Transactional
+	public SyncPushResponse push(UUID userId, SyncPushRequest request) {
+		User user = userRepository.findById(userId).orElseThrow();
+
+		List<UUID> processedTxns = processTransactions(request.transactions(), user);
+		List<UUID> processedLogs = processAuditLogs(request.auditLogs(), user);
+		List<UUID> processedPeople = processPeople(request.people(), user);
+		List<UUID> processedLoans = processLoans(request.loans(), user);
+		List<UUID> processedEmis = processEmis(request.emis(), user);
+
+		return new SyncPushResponse(processedTxns, processedLogs, processedPeople, processedLoans, processedEmis);
 	}
 
+	private List<UUID> processTransactions(List<TransactionDto> dtos, User user) {
+		if (dtos == null || dtos.isEmpty()) return List.of();
+		Map<UUID, Transaction> existingMap = transactionRepository.findAllById(dtos.stream().map(TransactionDto::id).toList()).stream()
+				.collect(Collectors.toMap(Transaction::getId, Function.identity()));
+		List<Transaction> toSave = new ArrayList<>();
+		List<UUID> processedIds = new ArrayList<>();
 
-	public SyncPushResponse push(UUID userId, SyncPushRequest request){
-
-		User user = userRepository.findById(userId).orElseThrow(() -> new RuntimeException("User not found"));
-
-		List<UUID> processedTxnIds = processTransactions(request.transactions(), user);
-
-		List<UUID> processedLogIds = processAuditLogs(request.auditLogs(),  user);
-
-		return new SyncPushResponse(processedTxnIds, processedLogIds);
+		for (TransactionDto dto : dtos) {
+			Transaction existing = existingMap.get(dto.id());
+			if (existing != null) {
+				if (dto.updatedAt().isAfter(existing.getUpdatedAt())) {
+					existing.setAmount(dto.amount());
+					existing.setTransactionType(dto.transactionType());
+					existing.setMerchant(dto.merchant());
+					existing.setCategory(dto.category());
+					existing.setTransactionDate(dto.transactionDate());
+					existing.setPaymentMethod(dto.paymentMethod());
+					existing.setSource(dto.source());
+					existing.setNotes(dto.notes());
+					existing.setDeleted(dto.isDeleted());
+					existing.setUpdatedAt(dto.updatedAt());
+					toSave.add(existing);
+				}
+			} else {
+				Transaction newTxn = new Transaction();
+				newTxn.setId(dto.id());
+				newTxn.setUser(user);
+				newTxn.setAmount(dto.amount());
+				newTxn.setTransactionType(dto.transactionType());
+				newTxn.setMerchant(dto.merchant());
+				newTxn.setCategory(dto.category());
+				newTxn.setTransactionDate(dto.transactionDate());
+				newTxn.setPaymentMethod(dto.paymentMethod());
+				newTxn.setSource(dto.source());
+				newTxn.setNotes(dto.notes());
+				newTxn.setCreatedAt(dto.createdAt());
+				newTxn.setUpdatedAt(dto.updatedAt());
+				newTxn.setDeleted(dto.isDeleted());
+				toSave.add(newTxn);
+			}
+			processedIds.add(dto.id());
+		}
+		transactionRepository.saveAll(toSave);
+		return processedIds;
 	}
 
-	private List<UUID> processAuditLogs(List<AuditLogDto> incomingLogs, User user) {
-		if (incomingLogs == null || incomingLogs.isEmpty()) return List.of();
-
+	private List<UUID> processAuditLogs(List<AuditLogDto> dtos, User user) {
+		if (dtos == null || dtos.isEmpty()) return List.of();
+		List<UUID> incomingIds = dtos.stream().map(AuditLogDto::id).toList();
+		Map<UUID, AuditLog> existingLogs = auditLogRepository.findAllById(incomingIds).stream()
+				.collect(Collectors.toMap(AuditLog::getId, Function.identity()));
 		List<AuditLog> logsToSave = new ArrayList<>();
 		List<UUID> processedIds = new ArrayList<>();
 
-		List<UUID> incomingIds = incomingLogs.stream().map(AuditLogDto::id).collect(Collectors.toList());
-
-		Map<UUID, AuditLog> existingLogs = auditLogRepository.findAllById(incomingIds).stream()
-				.collect(Collectors.toMap(AuditLog::getId, Function.identity()));
-
-		for (AuditLogDto dto : incomingLogs){
-			if (!existingLogs.containsKey(dto.id())){
+		for (AuditLogDto dto : dtos) {
+			if (!existingLogs.containsKey(dto.id())) {
 				AuditLog log = new AuditLog();
 				log.setId(dto.id());
 				log.setUser(user);
 				log.setEntityType(dto.entityType());
 				log.setEntityId(dto.entityId());
 				log.setActionType(dto.actionType());
-				log.setMetadata(dto.metadata()); // Native JSONB mapping!
+				log.setMetadata(dto.metadata());
 				log.setCreatedAt(dto.createdAt());
-
 				logsToSave.add(log);
 			}
-
 			processedIds.add(dto.id());
 		}
-
 		auditLogRepository.saveAll(logsToSave);
 		return processedIds;
 	}
 
-	private List<UUID> processTransactions(List<TransactionDto> dtos, User user) {
-		if (dtos == null || dtos.isEmpty()) {
-			return List.of();
-		}
+	private List<UUID> processPeople(List<PersonDto> dtos, User user) {
+		if (dtos == null || dtos.isEmpty()) return List.of();
+		Map<UUID, Person> existingMap = personRepository.findAllById(dtos.stream().map(PersonDto::id).toList()).stream()
+				.collect(Collectors.toMap(Person::getId, Function.identity()));
+		List<Person> toSave = new ArrayList<>();
+		List<UUID> processedIds = new ArrayList<>();
 
-		List<UUID> incomingIds = dtos.stream()
-				.map(TransactionDto::id)
-				.collect(Collectors.toList());
-
-		Map<UUID, Transaction> existingTransactionsMap = transactionRepository.findAllById(incomingIds)
-				.stream()
-				.collect(Collectors.toMap(Transaction::getId, Function.identity()));
-
-		List<Transaction> transactionsToSave = new ArrayList<>();
-		List<UUID> successfullyProcessedIds = new ArrayList<>();
-
-		for (TransactionDto incomingDto : dtos) {
-
-			Transaction existingTransaction = existingTransactionsMap.get(incomingDto.id());
-
-			if (existingTransaction != null) {
-				if (incomingDto.updatedAt().isAfter(existingTransaction.getUpdatedAt())) {
-					updateEntityFromDto(existingTransaction, incomingDto);
-					transactionsToSave.add(existingTransaction);
-					successfullyProcessedIds.add(incomingDto.id());
-				} else {
-					successfullyProcessedIds.add(incomingDto.id());
+		for (PersonDto dto : dtos) {
+			Person existing = existingMap.get(dto.id());
+			if (existing != null) {
+				if (dto.updatedAt().isAfter(existing.getUpdatedAt())) {
+					existing.setName(dto.name());
+					existing.setPhoneNumber(dto.phoneNumber());
+					existing.setDeleted(dto.isDeleted());
+					existing.setUpdatedAt(dto.updatedAt());
+					toSave.add(existing);
 				}
 			} else {
-				Transaction newTransaction = createEntityFromDto(incomingDto, user);
-				transactionsToSave.add(newTransaction);
-				successfullyProcessedIds.add(incomingDto.id());
+				Person newPerson = new Person();
+				newPerson.setId(dto.id());
+				newPerson.setUser(user);
+				newPerson.setName(dto.name());
+				newPerson.setPhoneNumber(dto.phoneNumber());
+				newPerson.setCreatedAt(dto.createdAt());
+				newPerson.setUpdatedAt(dto.updatedAt());
+				newPerson.setDeleted(dto.isDeleted());
+				toSave.add(newPerson);
 			}
+			processedIds.add(dto.id());
 		}
-
-		transactionRepository.saveAll(transactionsToSave);
-
-		return successfullyProcessedIds;
+		personRepository.saveAll(toSave);
+		return processedIds;
 	}
 
-	private Transaction createEntityFromDto(TransactionDto dto, User user) {
-		Transaction entity = new Transaction();
-		entity.setId(dto.id());
-		entity.setUser(user);
-		updateEntityFromDto(entity, dto);
+	private List<UUID> processLoans(List<LoanDto> dtos, User user) {
+		if (dtos == null || dtos.isEmpty()) return List.of();
+		Map<UUID, Loan> existingMap = loanRepository.findAllById(dtos.stream().map(LoanDto::id).toList()).stream()
+				.collect(Collectors.toMap(Loan::getId, Function.identity()));
+		List<Loan> toSave = new ArrayList<>();
+		List<UUID> processedIds = new ArrayList<>();
 
-		entity.setCreatedAt(dto.createdAt());
-		return entity;
+		for (LoanDto dto : dtos) {
+			Loan existing = existingMap.get(dto.id());
+			if (existing != null) {
+				if (dto.updatedAt().isAfter(existing.getUpdatedAt())) {
+					existing.setAmountLent(dto.amountLent());
+					existing.setDateGiven(dto.dateGiven());
+					existing.setExpectedReturnDate(dto.expectedReturnDate());
+					existing.setStatus(dto.status());
+					existing.setNotes(dto.notes());
+					existing.setDeleted(dto.isDeleted());
+					existing.setUpdatedAt(dto.updatedAt());
+					toSave.add(existing);
+				}
+			} else {
+				Loan newLoan = new Loan();
+				newLoan.setId(dto.id());
+				newLoan.setUser(user);
+				newLoan.setPerson(personRepository.getReferenceById(dto.personId()));
+				newLoan.setAmountLent(dto.amountLent());
+				newLoan.setDateGiven(dto.dateGiven());
+				newLoan.setExpectedReturnDate(dto.expectedReturnDate());
+				newLoan.setStatus(dto.status());
+				newLoan.setNotes(dto.notes());
+				newLoan.setCreatedAt(dto.createdAt());
+				newLoan.setUpdatedAt(dto.updatedAt());
+				newLoan.setDeleted(dto.isDeleted());
+				toSave.add(newLoan);
+			}
+			processedIds.add(dto.id());
+		}
+		loanRepository.saveAll(toSave);
+		return processedIds;
 	}
 
-	private void updateEntityFromDto(Transaction entity, TransactionDto dto) {
-		entity.setAmount(dto.amount());
-		entity.setTransactionType(dto.transactionType());
-		entity.setMerchant(dto.merchant());
-		entity.setCategory(dto.category());
-		entity.setTransactionDate(dto.transactionDate());
-		entity.setPaymentMethod(dto.paymentMethod());
-		entity.setSource(dto.source());
-		entity.setNotes(dto.notes());
-		entity.setDeleted(dto.isDeleted());
-		entity.setUpdatedAt(dto.updatedAt());
+	private List<UUID> processEmis(List<EmiDto> dtos, User user) {
+		if (dtos == null || dtos.isEmpty()) return List.of();
+		Map<UUID, Emi> existingMap = emiRepository.findAllById(dtos.stream().map(EmiDto::id).toList()).stream()
+				.collect(Collectors.toMap(Emi::getId, Function.identity()));
+		List<Emi> toSave = new ArrayList<>();
+		List<UUID> processedIds = new ArrayList<>();
+
+		for (EmiDto dto : dtos) {
+			Emi existing = existingMap.get(dto.id());
+			if (existing != null) {
+				if (dto.updatedAt().isAfter(existing.getUpdatedAt())) {
+					existing.setRefNumber(dto.refNumber());
+					existing.setItemName(dto.itemName());
+					existing.setOwnerType(dto.ownerType());
+					existing.setPrincipalAmount(dto.principalAmount());
+					existing.setMonthlyEmiAmount(dto.monthlyEmiAmount());
+					existing.setTotalMonths(dto.totalMonths());
+					existing.setStartDate(dto.startDate());
+					existing.setStatus(dto.status());
+					existing.setDeleted(dto.isDeleted());
+					existing.setUpdatedAt(dto.updatedAt());
+					toSave.add(existing);
+				}
+			} else {
+				Emi newEmi = new Emi();
+				newEmi.setId(dto.id());
+				newEmi.setUser(user);
+				if (dto.personId() != null) newEmi.setPerson(personRepository.getReferenceById(dto.personId()));
+				newEmi.setRefNumber(dto.refNumber());
+				newEmi.setItemName(dto.itemName());
+				newEmi.setOwnerType(dto.ownerType());
+				newEmi.setPrincipalAmount(dto.principalAmount());
+				newEmi.setMonthlyEmiAmount(dto.monthlyEmiAmount());
+				newEmi.setTotalMonths(dto.totalMonths());
+				newEmi.setStartDate(dto.startDate());
+				newEmi.setStatus(dto.status());
+				newEmi.setCreatedAt(dto.createdAt());
+				newEmi.setUpdatedAt(dto.updatedAt());
+				newEmi.setDeleted(dto.isDeleted());
+				toSave.add(newEmi);
+			}
+			processedIds.add(dto.id());
+		}
+		emiRepository.saveAll(toSave);
+		return processedIds;
 	}
 
-	private AuditLogDto mapLogToDto(AuditLog entity){
-		return new AuditLogDto(
-				entity.getId(),
-				entity.getEntityType(),
-				entity.getEntityId(),
-				entity.getActionType(),
-				entity.getMetadata(),
-				entity.getCreatedAt()
-		);
+
+	private TransactionDto mapTransactionToDto(Transaction e) {
+		return new TransactionDto(e.getId(), e.getAmount(), e.getTransactionType(), e.getMerchant(), e.getCategory(), e.getTransactionDate(), e.getPaymentMethod(), e.getSource(), e.getNotes(), e.getCreatedAt(), e.getUpdatedAt(), e.isDeleted());
+	}
+
+	private AuditLogDto mapLogToDto(AuditLog e) {
+		return new AuditLogDto(e.getId(), e.getEntityType(), e.getEntityId(), e.getActionType(), e.getMetadata(), e.getCreatedAt());
+	}
+
+	private PersonDto mapPersonToDto(Person e) {
+		return new PersonDto(e.getId(), e.getName(), e.getPhoneNumber(), e.getCreatedAt(), e.getUpdatedAt(), e.isDeleted());
+	}
+
+	private LoanDto mapLoanToDto(Loan e) {
+		return new LoanDto(e.getId(), e.getPerson().getId(), e.getAmountLent(), e.getDateGiven(), e.getExpectedReturnDate(), e.getStatus(), e.getNotes(), e.getCreatedAt(), e.getUpdatedAt(), e.isDeleted());
+	}
+
+	private EmiDto mapEmiToDto(Emi e) {
+		return new EmiDto(e.getId(), e.getPerson() != null ? e.getPerson().getId() : null, e.getRefNumber(), e.getItemName(), e.getOwnerType(), e.getPrincipalAmount(), e.getMonthlyEmiAmount(), e.getTotalMonths(), e.getStartDate(), e.getStatus(), e.getCreatedAt(), e.getUpdatedAt(), e.isDeleted());
 	}
 }
