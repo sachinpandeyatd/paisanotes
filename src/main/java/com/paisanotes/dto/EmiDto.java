@@ -6,6 +6,6 @@ import java.util.UUID;
 
 public record EmiDto(
     UUID id, UUID personId, String refNumber, String itemName, String ownerType, BigDecimal principalAmount,
-    BigDecimal monthlyEmiAmount, Integer totalMonths, LocalDate startDate, String status, 
+    BigDecimal monthlyEmiAmount, Integer totalMonths, Integer completedMonths, LocalDate startDate, String status,
     ZonedDateTime createdAt, ZonedDateTime updatedAt, boolean isDeleted
 ) {}

@@ -53,4 +53,8 @@ public class Emi extends BaseEntity{
 	@Column(nullable = false)
 	@Builder.Default
 	private String status = "ACTIVE";
+
+	@Column(name = "completed_months")
+	@Builder.Default
+	private Integer completedMonths = 0;
 }

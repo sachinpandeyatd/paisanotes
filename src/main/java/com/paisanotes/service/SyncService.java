@@ -185,6 +185,7 @@ public class SyncService {
 					existing.setNotes(dto.notes());
 					existing.setDeleted(dto.isDeleted());
 					existing.setUpdatedAt(dto.updatedAt());
+					existing.setAmountRepaid(dto.amountRepaid());
 					toSave.add(existing);
 				}
 			} else {
@@ -229,6 +230,7 @@ public class SyncService {
 					existing.setStatus(dto.status());
 					existing.setDeleted(dto.isDeleted());
 					existing.setUpdatedAt(dto.updatedAt());
+					existing.setCompletedMonths(dto.completedMonths());
 					toSave.add(existing);
 				}
 			} else {
@@ -269,10 +271,10 @@ public class SyncService {
 	}
 
 	private LoanDto mapLoanToDto(Loan e) {
-		return new LoanDto(e.getId(), e.getPerson().getId(), e.getAmountLent(), e.getDateGiven(), e.getExpectedReturnDate(), e.getStatus(), e.getNotes(), e.getCreatedAt(), e.getUpdatedAt(), e.isDeleted());
+		return new LoanDto(e.getId(), e.getPerson().getId(), e.getAmountLent(), e.getDateGiven(), e.getExpectedReturnDate(), e.getStatus(), e.getNotes(), e.getAmountRepaid(),e.getCreatedAt(), e.getUpdatedAt(), e.isDeleted());
 	}
 
 	private EmiDto mapEmiToDto(Emi e) {
-		return new EmiDto(e.getId(), e.getPerson() != null ? e.getPerson().getId() : null, e.getRefNumber(), e.getItemName(), e.getOwnerType(), e.getPrincipalAmount(), e.getMonthlyEmiAmount(), e.getTotalMonths(), e.getStartDate(), e.getStatus(), e.getCreatedAt(), e.getUpdatedAt(), e.isDeleted());
+		return new EmiDto(e.getId(), e.getPerson() != null ? e.getPerson().getId() : null, e.getRefNumber(), e.getItemName(), e.getOwnerType(), e.getPrincipalAmount(), e.getMonthlyEmiAmount(), e.getTotalMonths(), e.getCompletedMonths(), e.getStartDate(), e.getStatus(), e.getCreatedAt(), e.getUpdatedAt(), e.isDeleted());
 	}
 }
