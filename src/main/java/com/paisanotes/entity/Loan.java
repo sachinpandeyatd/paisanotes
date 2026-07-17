@@ -48,4 +48,6 @@ public class Loan extends BaseEntity{
 	@Column(name = "amount_repaid")
 	@Builder.Default
 	private BigDecimal amountRepaid = BigDecimal.ZERO;
+
+	private String type;
 }

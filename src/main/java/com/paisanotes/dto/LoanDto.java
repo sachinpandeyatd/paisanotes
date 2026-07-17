@@ -6,5 +6,5 @@ import java.util.UUID;
 
 public record LoanDto(
     UUID id, UUID personId, BigDecimal amountLent, LocalDate dateGiven, LocalDate expectedReturnDate,
-    String status, String notes, BigDecimal amountRepaid, ZonedDateTime createdAt, ZonedDateTime updatedAt, boolean isDeleted
+    String status, String notes, BigDecimal amountRepaid, String type, ZonedDateTime createdAt, ZonedDateTime updatedAt, boolean isDeleted
 ) {}

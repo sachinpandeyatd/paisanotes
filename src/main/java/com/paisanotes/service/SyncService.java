@@ -186,6 +186,7 @@ public class SyncService {
 					existing.setDeleted(dto.isDeleted());
 					existing.setUpdatedAt(dto.updatedAt());
 					existing.setAmountRepaid(dto.amountRepaid());
+					existing.setType(dto.type());
 					toSave.add(existing);
 				}
 			} else {
@@ -271,7 +272,7 @@ public class SyncService {
 	}
 
 	private LoanDto mapLoanToDto(Loan e) {
-		return new LoanDto(e.getId(), e.getPerson().getId(), e.getAmountLent(), e.getDateGiven(), e.getExpectedReturnDate(), e.getStatus(), e.getNotes(), e.getAmountRepaid(),e.getCreatedAt(), e.getUpdatedAt(), e.isDeleted());
+		return new LoanDto(e.getId(), e.getPerson().getId(), e.getAmountLent(), e.getDateGiven(), e.getExpectedReturnDate(), e.getStatus(), e.getNotes(), e.getAmountRepaid(), e.getType(), e.getCreatedAt(), e.getUpdatedAt(), e.isDeleted());
 	}
 
 	private EmiDto mapEmiToDto(Emi e) {
