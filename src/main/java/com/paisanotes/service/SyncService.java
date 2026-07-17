@@ -7,6 +7,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.math.BigDecimal;
 import java.time.ZoneId;
 import java.time.ZonedDateTime;
 import java.util.ArrayList;
@@ -185,8 +186,8 @@ public class SyncService {
 					existing.setNotes(dto.notes());
 					existing.setDeleted(dto.isDeleted());
 					existing.setUpdatedAt(dto.updatedAt());
-					existing.setAmountRepaid(dto.amountRepaid());
 					existing.setType(dto.type());
+					existing.setAmountRepaid(dto.amountRepaid());
 					toSave.add(existing);
 				}
 			} else {
@@ -202,6 +203,8 @@ public class SyncService {
 				newLoan.setCreatedAt(dto.createdAt());
 				newLoan.setUpdatedAt(dto.updatedAt());
 				newLoan.setDeleted(dto.isDeleted());
+				newLoan.setType(dto.type() != null ? dto.type() : "LENT");
+				newLoan.setAmountRepaid(dto.amountRepaid() != null ? dto.amountRepaid() : BigDecimal.ZERO);
 				toSave.add(newLoan);
 			}
 			processedIds.add(dto.id());
@@ -250,6 +253,7 @@ public class SyncService {
 				newEmi.setCreatedAt(dto.createdAt());
 				newEmi.setUpdatedAt(dto.updatedAt());
 				newEmi.setDeleted(dto.isDeleted());
+				newEmi.setCompletedMonths(dto.completedMonths() != null ? dto.completedMonths() : 0);
 				toSave.add(newEmi);
 			}
 			processedIds.add(dto.id());
@@ -272,7 +276,7 @@ public class SyncService {
 	}
 
 	private LoanDto mapLoanToDto(Loan e) {
-		return new LoanDto(e.getId(), e.getPerson().getId(), e.getAmountLent(), e.getDateGiven(), e.getExpectedReturnDate(), e.getStatus(), e.getNotes(), e.getAmountRepaid(), e.getType(), e.getCreatedAt(), e.getUpdatedAt(), e.isDeleted());
+		return new LoanDto(e.getId(), e.getPerson().getId(), e.getType(), e.getAmountLent(), e.getAmountRepaid(), e.getDateGiven(), e.getExpectedReturnDate(), e.getStatus(), e.getNotes(), e.getCreatedAt(), e.getUpdatedAt(), e.isDeleted());
 	}
 
 	private EmiDto mapEmiToDto(Emi e) {
