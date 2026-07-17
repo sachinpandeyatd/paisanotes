@@ -1,6 +1,7 @@
 package com.paisanotes.controller;
 
 import com.paisanotes.dto.AuthResponse;
+import com.paisanotes.dto.GoogleLoginRequest;
 import com.paisanotes.dto.LoginRequest;
 import com.paisanotes.dto.RegisterRequest;
 import com.paisanotes.service.AuthenticationService;
@@ -18,6 +19,15 @@ import org.springframework.web.bind.annotation.RestController;
 @RequiredArgsConstructor
 public class AuthController {
 	private final AuthenticationService authenticationService;
+
+	@PostMapping("/google")
+	public ResponseEntity<AuthResponse> googleLogin(@Valid @RequestBody GoogleLoginRequest request){
+		try{
+			return ResponseEntity.ok(authenticationService.googleLogin(request));
+		}catch (Exception e){
+			return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
+		}
+	}
 
 	@PostMapping("/register")
 	public ResponseEntity<AuthResponse> register (@Valid @RequestBody RegisterRequest request){
