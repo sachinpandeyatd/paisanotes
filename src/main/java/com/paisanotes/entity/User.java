@@ -25,6 +25,12 @@ public class User {
 	@Column(nullable = false)
 	private String name;
 
+	@Column(name = "reset_otp")
+	private String resetOtp;
+
+	@Column(name = "reset_otp_expiry")
+	private ZonedDateTime resetOtpExpiry;
+
 	@Column(nullable = false)
 	private ZonedDateTime createdAt;
 

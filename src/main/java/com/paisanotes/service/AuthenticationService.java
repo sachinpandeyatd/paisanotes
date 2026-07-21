@@ -4,10 +4,7 @@ import com.google.api.client.googleapis.auth.oauth2.GoogleIdToken;
 import com.google.api.client.googleapis.auth.oauth2.GoogleIdTokenVerifier;
 import com.google.api.client.http.javanet.NetHttpTransport;
 import com.google.api.client.json.gson.GsonFactory;
-import com.paisanotes.dto.AuthResponse;
-import com.paisanotes.dto.GoogleLoginRequest;
-import com.paisanotes.dto.LoginRequest;
-import com.paisanotes.dto.RegisterRequest;
+import com.paisanotes.dto.*;
 import com.paisanotes.entity.User;
 import com.paisanotes.repository.UserRepository;
 import com.paisanotes.security.JwtService;
@@ -20,8 +17,10 @@ import org.springframework.stereotype.Service;
 
 import java.io.IOException;
 import java.security.GeneralSecurityException;
+import java.time.ZonedDateTime;
 import java.util.Collections;
 import java.util.Optional;
+import java.util.Random;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
@@ -118,5 +117,43 @@ public class AuthenticationService {
 		String jwtToken = jwtService.generateToken(springUser);
 
 		return new AuthResponse(jwtToken, user.getId(), user.getName(), user.getEmail());
+	}
+
+	public void forgotPassword(ForgotPasswordRequest request) {
+		User user = userRepository.findByEmail(request.email())
+				.orElseThrow(() -> new IllegalArgumentException("User not found"));
+
+		// Generate a 6-digit OTP
+		String otp = String.format("%06d", new Random().nextInt(999999));
+
+		user.setResetOtp(otp);
+		user.setResetOtpExpiry(ZonedDateTime.now().plusMinutes(10)); // Expires in 10 mins
+		userRepository.save(user);
+
+		// 🚨 SIMULATING EMAIL SENDING
+		System.out.println("=================================================");
+		System.out.println("📧 EMAIL SENT TO: " + user.getEmail());
+		System.out.println("🔐 YOUR PASSWORD RESET OTP IS: " + otp);
+		System.out.println("=================================================");
+	}
+
+	public void resetPassword(ResetPasswordRequest request) {
+		User user = userRepository.findByEmail(request.email())
+				.orElseThrow(() -> new IllegalArgumentException("User not found"));
+
+		if (user.getResetOtp() == null || !user.getResetOtp().equals(request.otp())) {
+			throw new IllegalArgumentException("Invalid OTP");
+		}
+
+		if (ZonedDateTime.now().isAfter(user.getResetOtpExpiry())) {
+			throw new IllegalArgumentException("OTP has expired");
+		}
+
+		// Hash the new password and clear the OTP so it can't be used again
+		user.setPasswordHash(passwordEncoder.encode(request.newPassword()));
+		user.setResetOtp(null);
+		user.setResetOtpExpiry(null);
+
+		userRepository.save(user);
 	}
 }
