@@ -9,5 +9,6 @@ public record SyncPullResponse(
 		List<AuditLogDto> auditLogs,
 		List<PersonDto> people,
 		List<LoanDto> loans,
-		List<EmiDto> emis
+		List<EmiDto> emis,
+		List<CategoryDto> categories
 ){}

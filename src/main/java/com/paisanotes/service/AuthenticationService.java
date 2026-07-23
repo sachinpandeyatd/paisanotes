@@ -5,7 +5,9 @@ import com.google.api.client.googleapis.auth.oauth2.GoogleIdTokenVerifier;
 import com.google.api.client.http.javanet.NetHttpTransport;
 import com.google.api.client.json.gson.GsonFactory;
 import com.paisanotes.dto.*;
+import com.paisanotes.entity.Category;
 import com.paisanotes.entity.User;
+import com.paisanotes.repository.CategoryRepository;
 import com.paisanotes.repository.UserRepository;
 import com.paisanotes.security.JwtService;
 import lombok.RequiredArgsConstructor;
@@ -18,10 +20,7 @@ import org.springframework.stereotype.Service;
 import java.io.IOException;
 import java.security.GeneralSecurityException;
 import java.time.ZonedDateTime;
-import java.util.Collections;
-import java.util.Optional;
-import java.util.Random;
-import java.util.UUID;
+import java.util.*;
 import java.util.stream.Collectors;
 
 @Service
@@ -31,6 +30,7 @@ public class AuthenticationService {
 	private final PasswordEncoder passwordEncoder;
 	private final JwtService jwtService;
 	private final AuthenticationManager authenticationManager;
+	private final CategoryRepository categoryRepository;
 
 	@Value("${google.client-id}")
 	private String googleClientId;
@@ -55,6 +55,10 @@ public class AuthenticationService {
 
 			if(userOptional.isPresent()){
 				user = userOptional.get();
+
+				if (categoryRepository.countByUserId(user.getId()) == 0) {
+					seedDefaultCategories(user);
+				}
 			}else {
 				user = new User();
 				user.setEmail(email);
@@ -64,6 +68,7 @@ public class AuthenticationService {
 				user.setPasswordHash(passwordEncoder.encode(randomPassword));
 
 				user = userRepository.save(user);
+				seedDefaultCategories(user);
 			}
 
 			org.springframework.security.core.userdetails.User springUser =
@@ -91,6 +96,7 @@ public class AuthenticationService {
 		user.setPasswordHash(passwordEncoder.encode(request.password()));
 
 		User savedUser = userRepository.save(user);
+		seedDefaultCategories(user);
 
 		org.springframework.security.core.userdetails.User springUser = new org.springframework.security.core.userdetails.User(
 				savedUser.getEmail(), savedUser.getPasswordHash(), Collections.emptyList()
@@ -109,6 +115,10 @@ public class AuthenticationService {
 		User user = userRepository.findByEmail(request.email()).orElseThrow(
 				() -> new IllegalArgumentException("User not found")
 		);
+
+		if (categoryRepository.countByUserId(user.getId()) == 0) {
+			seedDefaultCategories(user);
+		}
 
 		org.springframework.security.core.userdetails.User springUser = new org.springframework.security.core.userdetails.User(
 				user.getEmail(), user.getPasswordHash(), Collections.emptyList()
@@ -155,5 +165,33 @@ public class AuthenticationService {
 		user.setResetOtpExpiry(null);
 
 		userRepository.save(user);
+	}
+
+	// 🚨 Add this injection: private final CategoryRepository categoryRepository;
+
+	private void seedDefaultCategories(User user) {
+		List<Category> defaults = List.of(
+				createCategory(user, "Food", "Fastfood", "#FF9800"),
+				createCategory(user, "Shopping", "ShoppingCart", "#E91E63"),
+				createCategory(user, "Travel", "Commute", "#2196F3"),
+				createCategory(user, "Bills", "Receipt", "#9C27B0"),
+				createCategory(user, "Medical", "MedicalServices", "#F44336"),
+				createCategory(user, "Salary", "Payments", "#4CAF50"),
+				createCategory(user, "Investment", "TrendingUp", "#009688")
+		);
+		categoryRepository.saveAll(defaults);
+	}
+
+	private Category createCategory(User user, String name, String icon, String color) {
+		Category category = new Category();
+		category.setId(UUID.randomUUID());
+		category.setUser(user);
+		category.setName(name);
+		category.setIcon(icon);
+		category.setColor(color);
+		category.setDefault(true);
+		category.setCreatedAt(java.time.ZonedDateTime.now());
+		category.setUpdatedAt(java.time.ZonedDateTime.now());
+		return category;
 	}
 }

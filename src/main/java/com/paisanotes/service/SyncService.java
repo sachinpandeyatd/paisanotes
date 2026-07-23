@@ -27,6 +27,7 @@ public class SyncService {
 	private final EmiRepository emiRepository;
 	private final AuditLogRepository auditLogRepository;
 	private final UserRepository userRepository;
+	private final CategoryRepository categoryRepository;
 
 
 	public SyncPullResponse pull(UUID userId, ZonedDateTime lastSyncTime) {
@@ -46,7 +47,11 @@ public class SyncService {
 		List<AuditLogDto> logs = auditLogRepository.findByUserIdAndCreatedAtGreaterThan(userId, lastSyncTime).stream()
 				.map(this::mapLogToDto).toList();
 
-		return new SyncPullResponse(ZonedDateTime.now(ZoneId.of("UTC")), txns, logs, people, loans, emis);
+		List<CategoryDto> categories = categoryRepository.findModifiedAfter(userId, lastSyncTime).stream()
+				.map(e -> new CategoryDto(e.getId(), e.getName(), e.getIcon(), e.getColor(), e.isDefault(), e.getCreatedAt(), e.getUpdatedAt(), e.isDeleted()))
+				.toList();
+
+		return new SyncPullResponse(ZonedDateTime.now(ZoneId.of("UTC")), txns, logs, people, loans, emis, categories);
 	}
 
 	@Transactional
@@ -58,8 +63,47 @@ public class SyncService {
 		List<UUID> processedPeople = processPeople(request.people(), user);
 		List<UUID> processedLoans = processLoans(request.loans(), user);
 		List<UUID> processedEmis = processEmis(request.emis(), user);
+		List<UUID> processedCategories = processCategories(request.categories(), user);
 
 		return new SyncPushResponse(processedTxns, processedLogs, processedPeople, processedLoans, processedEmis);
+	}
+
+	private List<UUID> processCategories(List<CategoryDto> dtos, User user) {
+		if (dtos == null || dtos.isEmpty()) return List.of();
+		Map<UUID, Category> existingMap = categoryRepository.findAllById(dtos.stream().map(CategoryDto::id).toList()).stream()
+				.collect(Collectors.toMap(Category::getId, Function.identity()));
+		List<Category> toSave = new ArrayList<>();
+		List<UUID> processedIds = new ArrayList<>();
+
+		for (CategoryDto dto : dtos) {
+			Category existing = existingMap.get(dto.id());
+			if (existing != null) {
+				if (dto.updatedAt().isAfter(existing.getUpdatedAt())) {
+					existing.setName(dto.name());
+					existing.setIcon(dto.icon());
+					existing.setColor(dto.color());
+					existing.setDefault(dto.isDefault());
+					existing.setDeleted(dto.isDeleted());
+					existing.setUpdatedAt(dto.updatedAt());
+					toSave.add(existing);
+				}
+			} else {
+				Category newCat = new Category();
+				newCat.setId(dto.id());
+				newCat.setUser(user);
+				newCat.setName(dto.name());
+				newCat.setIcon(dto.icon());
+				newCat.setColor(dto.color());
+				newCat.setDefault(dto.isDefault());
+				newCat.setCreatedAt(dto.createdAt());
+				newCat.setUpdatedAt(dto.updatedAt());
+				newCat.setDeleted(dto.isDeleted());
+				toSave.add(newCat);
+			}
+			processedIds.add(dto.id());
+		}
+		categoryRepository.saveAll(toSave);
+		return processedIds;
 	}
 
 	private List<UUID> processTransactions(List<TransactionDto> dtos, User user) {
@@ -264,7 +308,7 @@ public class SyncService {
 
 
 	private TransactionDto mapTransactionToDto(Transaction e) {
-		return new TransactionDto(e.getId(), e.getAmount(), e.getTransactionType(), e.getMerchant(), e.getCategory(), e.getTransactionDate(), e.getPaymentMethod(), e.getSource(), e.getNotes(), e.getCreatedAt(), e.getUpdatedAt(), e.isDeleted());
+		return new TransactionDto(e.getId(), e.getAmount(), e.getTransactionType(), e.getMerchant(), e.getCategory(), e.getCategoryId(), e.getTransactionDate(), e.getPaymentMethod(), e.getSource(), e.getNotes(), e.getCreatedAt(), e.getUpdatedAt(), e.isDeleted());
 	}
 
 	private AuditLogDto mapLogToDto(AuditLog e) {
