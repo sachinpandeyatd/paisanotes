@@ -28,6 +28,7 @@ public class SyncService {
 	private final AuditLogRepository auditLogRepository;
 	private final UserRepository userRepository;
 	private final CategoryRepository categoryRepository;
+	private final BudgetRepository budgetRepository;
 
 
 	public SyncPullResponse pull(UUID userId, ZonedDateTime lastSyncTime) {
@@ -51,21 +52,68 @@ public class SyncService {
 				.map(e -> new CategoryDto(e.getId(), e.getName(), e.getIcon(), e.getColor(), e.isDefault(), e.getCreatedAt(), e.getUpdatedAt(), e.isDeleted()))
 				.toList();
 
-		return new SyncPullResponse(ZonedDateTime.now(ZoneId.of("UTC")), txns, logs, people, loans, emis, categories);
+		List<BudgetDto> budgets = budgetRepository.findModifiedAfter(userId, lastSyncTime).stream()
+				.map(e -> new BudgetDto(e.getId(), e.getCategory().getId(), e.getMonthlyLimit(), e.getCreatedAt(), e.getUpdatedAt(), e.isDeleted())).toList();
+
+		return new SyncPullResponse(ZonedDateTime.now(ZoneId.of("UTC")), txns, logs, people, loans, emis, categories, budgets);
 	}
 
 	@Transactional
 	public SyncPushResponse push(UUID userId, SyncPushRequest request) {
 		User user = userRepository.findById(userId).orElseThrow();
 
-		List<UUID> processedTxns = processTransactions(request.transactions(), user);
-		List<UUID> processedLogs = processAuditLogs(request.auditLogs(), user);
-		List<UUID> processedPeople = processPeople(request.people(), user);
-		List<UUID> processedLoans = processLoans(request.loans(), user);
-		List<UUID> processedEmis = processEmis(request.emis(), user);
-		List<UUID> processedCategories = processCategories(request.categories(), user);
+		// 1. Process all incoming data and get the lists of successfully saved IDs
+		List<UUID> processedTransactionIds = processTransactions(request.transactions(), user);
+		List<UUID> processedAuditLogIds = processAuditLogs(request.auditLogs(), user);
+		List<UUID> processedPersonIds = processPeople(request.people(), user);
+		List<UUID> processedLoanIds = processLoans(request.loans(), user);
+		List<UUID> processedEmiIds = processEmis(request.emis(), user);
+		List<UUID> processedCategoryIds = processCategories(request.categories(), user);
+		List<UUID> processedBudgetIds = processBudgets(request.budgets(), user);
 
-		return new SyncPushResponse(processedTxns, processedLogs, processedPeople, processedLoans, processedEmis);
+		// 2. Put those exact IDs into the Response object
+		return new SyncPushResponse(
+				processedTransactionIds,
+				processedAuditLogIds,
+				processedPersonIds,
+				processedLoanIds,
+				processedEmiIds,
+				processedCategoryIds,
+				processedBudgetIds
+		);
+	}
+
+	private List<UUID> processBudgets(List<BudgetDto> dtos, User user) {
+		if (dtos == null || dtos.isEmpty()) return List.of();
+		Map<UUID, Budget> existingMap = budgetRepository.findAllById(dtos.stream().map(BudgetDto::id).toList()).stream()
+				.collect(Collectors.toMap(Budget::getId, Function.identity()));
+		List<Budget> toSave = new ArrayList<>();
+		List<UUID> processedIds = new ArrayList<>();
+
+		for (BudgetDto dto : dtos) {
+			Budget existing = existingMap.get(dto.id());
+			if (existing != null) {
+				if (dto.updatedAt().isAfter(existing.getUpdatedAt())) {
+					existing.setMonthlyLimit(dto.monthlyLimit());
+					existing.setDeleted(dto.isDeleted());
+					existing.setUpdatedAt(dto.updatedAt());
+					toSave.add(existing);
+				}
+			} else {
+				Budget newBudget = new Budget();
+				newBudget.setId(dto.id());
+				newBudget.setUser(user);
+				newBudget.setCategory(categoryRepository.getReferenceById(dto.categoryId()));
+				newBudget.setMonthlyLimit(dto.monthlyLimit());
+				newBudget.setCreatedAt(dto.createdAt());
+				newBudget.setUpdatedAt(dto.updatedAt());
+				newBudget.setDeleted(dto.isDeleted());
+				toSave.add(newBudget);
+			}
+			processedIds.add(dto.id());
+		}
+		budgetRepository.saveAll(toSave);
+		return processedIds;
 	}
 
 	private List<UUID> processCategories(List<CategoryDto> dtos, User user) {

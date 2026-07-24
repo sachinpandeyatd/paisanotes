@@ -8,5 +8,7 @@ public record SyncPushResponse(
 		List<UUID> processedAuditLogIds,
 		List<UUID> processedPersonIds,
 		List<UUID> processedLoanIds,
-		List<UUID> processedEmiIds
-){}
+		List<UUID> processedEmiIds,
+		List<UUID> processedCategoryIds,
+		List<UUID> processedBudgetIds
+) {}
