@@ -10,5 +10,6 @@ public record SyncPushResponse(
 		List<UUID> processedLoanIds,
 		List<UUID> processedEmiIds,
 		List<UUID> processedCategoryIds,
-		List<UUID> processedBudgetIds
+		List<UUID> processedBudgetIds,
+		List<UUID> processedAccountIds
 ) {}

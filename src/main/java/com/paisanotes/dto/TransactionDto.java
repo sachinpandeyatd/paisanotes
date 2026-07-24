@@ -11,6 +11,8 @@ public record TransactionDto(
 		String merchant,
 		String category,
 		UUID categoryId,
+		UUID accountId,
+		UUID transferAccountId,
 		ZonedDateTime transactionDate,
 		String paymentMethod,
 		String source,

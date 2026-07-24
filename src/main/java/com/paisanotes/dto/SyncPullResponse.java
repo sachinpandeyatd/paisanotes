@@ -11,5 +11,6 @@ public record SyncPullResponse(
 		List<LoanDto> loans,
 		List<EmiDto> emis,
 		List<CategoryDto> categories,
-		List<BudgetDto> budgets
+		List<BudgetDto> budgets,
+		List<AccountDto> accounts
 ){}

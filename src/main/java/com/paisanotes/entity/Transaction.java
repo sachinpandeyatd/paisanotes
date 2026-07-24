@@ -38,6 +38,12 @@ public class Transaction extends BaseEntity{
 	@Column(name = "category_id")
 	private UUID categoryId;
 
+	@Column(name = "account_id")
+	private UUID accountId;
+
+	@Column(name = "transfer_account_id")
+	private UUID transferAccountId;
+
 	@Column(name = "transaction_date", nullable = false)
 	private ZonedDateTime transactionDate;
 
@@ -49,4 +55,5 @@ public class Transaction extends BaseEntity{
 
 	@Column(columnDefinition = "TEXT")
 	private String notes;
+
 }

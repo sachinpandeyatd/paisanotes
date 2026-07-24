@@ -29,6 +29,7 @@ public class SyncService {
 	private final UserRepository userRepository;
 	private final CategoryRepository categoryRepository;
 	private final BudgetRepository budgetRepository;
+	private final AccountRepository accountRepository;
 
 
 	public SyncPullResponse pull(UUID userId, ZonedDateTime lastSyncTime) {
@@ -52,10 +53,14 @@ public class SyncService {
 				.map(e -> new CategoryDto(e.getId(), e.getName(), e.getIcon(), e.getColor(), e.isDefault(), e.getCreatedAt(), e.getUpdatedAt(), e.isDeleted()))
 				.toList();
 
+		List<AccountDto> accounts = accountRepository.findModifiedAfter(userId, lastSyncTime).stream()
+				.map(e -> new AccountDto(e.getId(), e.getName(), e.getType(), e.getInitialBalance(), e.getCreatedAt(), e.getUpdatedAt(), e.isDeleted()))
+				.toList();
+
 		List<BudgetDto> budgets = budgetRepository.findModifiedAfter(userId, lastSyncTime).stream()
 				.map(e -> new BudgetDto(e.getId(), e.getCategory().getId(), e.getMonthlyLimit(), e.getCreatedAt(), e.getUpdatedAt(), e.isDeleted())).toList();
 
-		return new SyncPullResponse(ZonedDateTime.now(ZoneId.of("UTC")), txns, logs, people, loans, emis, categories, budgets);
+		return new SyncPullResponse(ZonedDateTime.now(ZoneId.of("UTC")), txns, logs, people, loans, emis, categories, budgets, accounts);
 	}
 
 	@Transactional
@@ -70,6 +75,7 @@ public class SyncService {
 		List<UUID> processedEmiIds = processEmis(request.emis(), user);
 		List<UUID> processedCategoryIds = processCategories(request.categories(), user);
 		List<UUID> processedBudgetIds = processBudgets(request.budgets(), user);
+		List<UUID> processedAccountIds = processAccounts(request.accounts(), user);
 
 		// 2. Put those exact IDs into the Response object
 		return new SyncPushResponse(
@@ -79,8 +85,45 @@ public class SyncService {
 				processedLoanIds,
 				processedEmiIds,
 				processedCategoryIds,
-				processedBudgetIds
+				processedBudgetIds,
+				processedAccountIds
 		);
+	}
+
+	private List<UUID> processAccounts(List<AccountDto> dtos, User user) {
+		if (dtos == null || dtos.isEmpty()) return List.of();
+		Map<UUID, Account> existingMap = accountRepository.findAllById(dtos.stream().map(AccountDto::id).toList()).stream()
+				.collect(Collectors.toMap(Account::getId, Function.identity()));
+		List<Account> toSave = new ArrayList<>();
+		List<UUID> processedIds = new ArrayList<>();
+
+		for (AccountDto dto : dtos) {
+			Account existing = existingMap.get(dto.id());
+			if (existing != null) {
+				if (dto.updatedAt().isAfter(existing.getUpdatedAt())) {
+					existing.setName(dto.name());
+					existing.setType(dto.type());
+					existing.setInitialBalance(dto.initialBalance());
+					existing.setDeleted(dto.isDeleted());
+					existing.setUpdatedAt(dto.updatedAt());
+					toSave.add(existing);
+				}
+			} else {
+				Account newAcc = new Account();
+				newAcc.setId(dto.id());
+				newAcc.setUser(user);
+				newAcc.setName(dto.name());
+				newAcc.setType(dto.type());
+				newAcc.setInitialBalance(dto.initialBalance());
+				newAcc.setCreatedAt(dto.createdAt());
+				newAcc.setUpdatedAt(dto.updatedAt());
+				newAcc.setDeleted(dto.isDeleted());
+				toSave.add(newAcc);
+			}
+			processedIds.add(dto.id());
+		}
+		accountRepository.saveAll(toSave);
+		return processedIds;
 	}
 
 	private List<UUID> processBudgets(List<BudgetDto> dtos, User user) {
@@ -169,6 +212,8 @@ public class SyncService {
 					existing.setTransactionType(dto.transactionType());
 					existing.setMerchant(dto.merchant());
 					existing.setCategory(dto.category());
+					existing.setAccountId(dto.accountId());
+					existing.setTransferAccountId(dto.transferAccountId());
 					existing.setTransactionDate(dto.transactionDate());
 					existing.setPaymentMethod(dto.paymentMethod());
 					existing.setSource(dto.source());
@@ -185,6 +230,8 @@ public class SyncService {
 				newTxn.setTransactionType(dto.transactionType());
 				newTxn.setMerchant(dto.merchant());
 				newTxn.setCategory(dto.category());
+				newTxn.setAccountId(dto.accountId());
+				newTxn.setTransferAccountId(dto.transferAccountId());
 				newTxn.setTransactionDate(dto.transactionDate());
 				newTxn.setPaymentMethod(dto.paymentMethod());
 				newTxn.setSource(dto.source());
@@ -356,7 +403,7 @@ public class SyncService {
 
 
 	private TransactionDto mapTransactionToDto(Transaction e) {
-		return new TransactionDto(e.getId(), e.getAmount(), e.getTransactionType(), e.getMerchant(), e.getCategory(), e.getCategoryId(), e.getTransactionDate(), e.getPaymentMethod(), e.getSource(), e.getNotes(), e.getCreatedAt(), e.getUpdatedAt(), e.isDeleted());
+		return new TransactionDto(e.getId(), e.getAmount(), e.getTransactionType(), e.getMerchant(), e.getCategory(), e.getCategoryId(), e.getAccountId(), e.getTransferAccountId(), e.getTransactionDate(), e.getPaymentMethod(), e.getSource(), e.getNotes(), e.getCreatedAt(), e.getUpdatedAt(), e.isDeleted());
 	}
 
 	private AuditLogDto mapLogToDto(AuditLog e) {

@@ -5,8 +5,10 @@ import com.google.api.client.googleapis.auth.oauth2.GoogleIdTokenVerifier;
 import com.google.api.client.http.javanet.NetHttpTransport;
 import com.google.api.client.json.gson.GsonFactory;
 import com.paisanotes.dto.*;
+import com.paisanotes.entity.Account;
 import com.paisanotes.entity.Category;
 import com.paisanotes.entity.User;
+import com.paisanotes.repository.AccountRepository;
 import com.paisanotes.repository.CategoryRepository;
 import com.paisanotes.repository.UserRepository;
 import com.paisanotes.security.JwtService;
@@ -31,6 +33,7 @@ public class AuthenticationService {
 	private final JwtService jwtService;
 	private final AuthenticationManager authenticationManager;
 	private final CategoryRepository categoryRepository;
+	private final AccountRepository accountRepository;
 
 	@Value("${google.client-id}")
 	private String googleClientId;
@@ -56,9 +59,7 @@ public class AuthenticationService {
 			if(userOptional.isPresent()){
 				user = userOptional.get();
 
-				if (categoryRepository.countByUserId(user.getId()) == 0) {
-					seedDefaultCategories(user);
-				}
+				ensureDefaultData(user);
 			}else {
 				user = new User();
 				user.setEmail(email);
@@ -68,7 +69,7 @@ public class AuthenticationService {
 				user.setPasswordHash(passwordEncoder.encode(randomPassword));
 
 				user = userRepository.save(user);
-				seedDefaultCategories(user);
+				ensureDefaultData(user);
 			}
 
 			org.springframework.security.core.userdetails.User springUser =
@@ -96,7 +97,7 @@ public class AuthenticationService {
 		user.setPasswordHash(passwordEncoder.encode(request.password()));
 
 		User savedUser = userRepository.save(user);
-		seedDefaultCategories(user);
+		ensureDefaultData(user);
 
 		org.springframework.security.core.userdetails.User springUser = new org.springframework.security.core.userdetails.User(
 				savedUser.getEmail(), savedUser.getPasswordHash(), Collections.emptyList()
@@ -116,9 +117,7 @@ public class AuthenticationService {
 				() -> new IllegalArgumentException("User not found")
 		);
 
-		if (categoryRepository.countByUserId(user.getId()) == 0) {
-			seedDefaultCategories(user);
-		}
+		ensureDefaultData(user);
 
 		org.springframework.security.core.userdetails.User springUser = new org.springframework.security.core.userdetails.User(
 				user.getEmail(), user.getPasswordHash(), Collections.emptyList()
@@ -127,6 +126,17 @@ public class AuthenticationService {
 		String jwtToken = jwtService.generateToken(springUser);
 
 		return new AuthResponse(jwtToken, user.getId(), user.getName(), user.getEmail());
+	}
+
+	private void ensureDefaultData(User user) {
+		// Safe check for categories
+		if (categoryRepository.countByUserId(user.getId()) == 0) {
+			seedDefaultCategories(user);
+		}
+		// Safe check for accounts
+		if (accountRepository.countByUserId(user.getId()) == 0) {
+			seedDefaultAccounts(user);
+		}
 	}
 
 	public void forgotPassword(ForgotPasswordRequest request) {
@@ -193,5 +203,20 @@ public class AuthenticationService {
 		category.setCreatedAt(java.time.ZonedDateTime.now());
 		category.setUpdatedAt(java.time.ZonedDateTime.now());
 		return category;
+	}
+
+	private void seedDefaultAccounts(User user) {
+		if (accountRepository.countByUserId(user.getId()) == 0) {
+			Account cashWallet = new Account();
+			cashWallet.setId(UUID.randomUUID());
+			cashWallet.setUser(user);
+			cashWallet.setName("Cash Wallet");
+			cashWallet.setType("CASH");
+			cashWallet.setInitialBalance(java.math.BigDecimal.ZERO);
+			cashWallet.setCreatedAt(java.time.ZonedDateTime.now());
+			cashWallet.setUpdatedAt(java.time.ZonedDateTime.now());
+
+			accountRepository.save(cashWallet);
+		}
 	}
 }
