@@ -369,6 +369,9 @@ public class SyncService {
 					existing.setPrincipalAmount(dto.principalAmount());
 					existing.setMonthlyEmiAmount(dto.monthlyEmiAmount());
 					existing.setTotalMonths(dto.totalMonths());
+					existing.setTotalAmountWithInterest(dto.totalAmountWithInterest());
+					existing.setInterestRate(dto.interestRate());
+					existing.setAmountPaid(dto.amountPaid());
 					existing.setStartDate(dto.startDate());
 					existing.setStatus(dto.status());
 					existing.setDeleted(dto.isDeleted());
@@ -387,6 +390,10 @@ public class SyncService {
 				newEmi.setPrincipalAmount(dto.principalAmount());
 				newEmi.setMonthlyEmiAmount(dto.monthlyEmiAmount());
 				newEmi.setTotalMonths(dto.totalMonths());
+				newEmi.setTotalAmountWithInterest(dto.totalAmountWithInterest() != null ? dto.totalAmountWithInterest() : dto.principalAmount());
+				newEmi.setInterestRate(dto.interestRate());
+				newEmi.setAmountPaid(dto.amountPaid() != null ? dto.amountPaid() : BigDecimal.ZERO);
+				newEmi.setStartDate(dto.startDate());
 				newEmi.setStartDate(dto.startDate());
 				newEmi.setStatus(dto.status());
 				newEmi.setCreatedAt(dto.createdAt());
@@ -419,6 +426,6 @@ public class SyncService {
 	}
 
 	private EmiDto mapEmiToDto(Emi e) {
-		return new EmiDto(e.getId(), e.getPerson() != null ? e.getPerson().getId() : null, e.getRefNumber(), e.getItemName(), e.getOwnerType(), e.getPrincipalAmount(), e.getMonthlyEmiAmount(), e.getTotalMonths(), e.getCompletedMonths(), e.getStartDate(), e.getStatus(), e.getCreatedAt(), e.getUpdatedAt(), e.isDeleted());
+		return new EmiDto(e.getId(), e.getPerson() != null ? e.getPerson().getId() : null, e.getRefNumber(), e.getItemName(), e.getOwnerType(), e.getPrincipalAmount(), e.getMonthlyEmiAmount(), e.getTotalMonths(), e.getCompletedMonths(), e.getTotalAmountWithInterest(), e.getInterestRate(), e.getAmountPaid(), e.getStartDate(), e.getStatus(), e.getCreatedAt(), e.getUpdatedAt(), e.isDeleted());
 	}
 }

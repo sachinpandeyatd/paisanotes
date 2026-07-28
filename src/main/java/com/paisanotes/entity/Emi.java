@@ -57,4 +57,15 @@ public class Emi extends BaseEntity{
 	@Column(name = "completed_months")
 	@Builder.Default
 	private Integer completedMonths = 0;
+
+	@Column(name = "total_amount_with_interest", nullable = false, precision = 12, scale = 2)
+	@Builder.Default
+	private BigDecimal totalAmountWithInterest = BigDecimal.ZERO;
+
+	@Column(name = "interest_rate", precision = 5, scale = 2)
+	private BigDecimal interestRate;
+
+	@Column(name = "amount_paid", nullable = false, precision = 12, scale = 2)
+	@Builder.Default
+	private BigDecimal amountPaid = BigDecimal.ZERO;
 }
