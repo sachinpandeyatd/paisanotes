@@ -69,19 +69,31 @@ public class SyncService {
 
 		// Process Independent Entities FIRST (Parents)
 		List<UUID> processedAccountIds = processAccounts(request.accounts(), user);
+		accountRepository.flush();
+
 		List<UUID> processedCategoryIds = processCategories(request.categories(), user);
+		categoryRepository.flush();
+
 		List<UUID> processedPersonIds = processPeople(request.people(), user);
+		personRepository.flush();
 
-		// Process 1st-Level Dependencies (Depend on People/Categories)
+		// Process 1st-Level Children
 		List<UUID> processedEmiIds = processEmis(request.emis(), user);
+		emiRepository.flush();
+
 		List<UUID> processedLoanIds = processLoans(request.loans(), user);
+		loanRepository.flush();
+
 		List<UUID> processedBudgetIds = processBudgets(request.budgets(), user);
+		budgetRepository.flush();
 
-		// Process 2nd-Level Dependencies (Depend on Accounts & Categories)
+		// Process Transactions (Now safe because parents definitely exist!)
 		List<UUID> processedTransactionIds = processTransactions(request.transactions(), user);
+		transactionRepository.flush();
 
-		// Process Logs LAST (Because they depend on everything else)
+		// Process Logs Last
 		List<UUID> processedAuditLogIds = processAuditLogs(request.auditLogs(), user);
+		auditLogRepository.flush();
 
 		// Return them in the exact order the Record expects
 		return new SyncPushResponse(
