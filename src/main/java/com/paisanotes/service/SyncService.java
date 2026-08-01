@@ -67,17 +67,23 @@ public class SyncService {
 	public SyncPushResponse push(UUID userId, SyncPushRequest request) {
 		User user = userRepository.findById(userId).orElseThrow();
 
-		// 1. Process all incoming data and get the lists of successfully saved IDs
-		List<UUID> processedTransactionIds = processTransactions(request.transactions(), user);
-		List<UUID> processedAuditLogIds = processAuditLogs(request.auditLogs(), user);
-		List<UUID> processedPersonIds = processPeople(request.people(), user);
-		List<UUID> processedLoanIds = processLoans(request.loans(), user);
-		List<UUID> processedEmiIds = processEmis(request.emis(), user);
-		List<UUID> processedCategoryIds = processCategories(request.categories(), user);
-		List<UUID> processedBudgetIds = processBudgets(request.budgets(), user);
+		// Process Independent Entities FIRST (Parents)
 		List<UUID> processedAccountIds = processAccounts(request.accounts(), user);
+		List<UUID> processedCategoryIds = processCategories(request.categories(), user);
+		List<UUID> processedPersonIds = processPeople(request.people(), user);
 
-		// 2. Put those exact IDs into the Response object
+		// Process 1st-Level Dependencies (Depend on People/Categories)
+		List<UUID> processedEmiIds = processEmis(request.emis(), user);
+		List<UUID> processedLoanIds = processLoans(request.loans(), user);
+		List<UUID> processedBudgetIds = processBudgets(request.budgets(), user);
+
+		// Process 2nd-Level Dependencies (Depend on Accounts & Categories)
+		List<UUID> processedTransactionIds = processTransactions(request.transactions(), user);
+
+		// Process Logs LAST (Because they depend on everything else)
+		List<UUID> processedAuditLogIds = processAuditLogs(request.auditLogs(), user);
+
+		// Return them in the exact order the Record expects
 		return new SyncPushResponse(
 				processedTransactionIds,
 				processedAuditLogIds,
