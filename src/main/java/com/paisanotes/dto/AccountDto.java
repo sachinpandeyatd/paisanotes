@@ -5,5 +5,6 @@ import java.util.UUID;
 
 public record AccountDto(
     UUID id, String name, String type, BigDecimal initialBalance, 
+    Integer statementDay, Integer dueDay,
     ZonedDateTime createdAt, ZonedDateTime updatedAt, boolean isDeleted
 ) {}

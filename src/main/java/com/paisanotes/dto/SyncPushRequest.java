@@ -10,5 +10,6 @@ public record SyncPushRequest(
 		List<EmiDto> emis,
 		List<CategoryDto> categories,
 		List<BudgetDto> budgets,
-		List<AccountDto> accounts
+		List<AccountDto> accounts,
+		List<CreditCardBillDto> ccBills
 ){}

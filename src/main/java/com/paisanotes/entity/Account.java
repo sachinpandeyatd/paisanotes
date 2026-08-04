@@ -32,4 +32,10 @@ public class Account extends BaseEntity{
 	@Column(name = "initial_balance", nullable = false, precision = 12, scale = 2)
 	@Builder.Default
 	private BigDecimal initialBalance = BigDecimal.ZERO;
+
+	@Column(name = "statement_day")
+	private Integer statementDay;
+
+	@Column(name = "due_day")
+	private Integer dueDay;
 }

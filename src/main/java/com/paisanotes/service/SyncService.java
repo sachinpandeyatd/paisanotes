@@ -30,6 +30,7 @@ public class SyncService {
 	private final CategoryRepository categoryRepository;
 	private final BudgetRepository budgetRepository;
 	private final AccountRepository accountRepository;
+	private final CreditCardBillRepository ccBillRepository;
 
 
 	public SyncPullResponse pull(UUID userId, ZonedDateTime lastSyncTime) {
@@ -54,13 +55,17 @@ public class SyncService {
 				.toList();
 
 		List<AccountDto> accounts = accountRepository.findModifiedAfter(userId, lastSyncTime).stream()
-				.map(e -> new AccountDto(e.getId(), e.getName(), e.getType(), e.getInitialBalance(), e.getCreatedAt(), e.getUpdatedAt(), e.isDeleted()))
+				.map(e -> new AccountDto(e.getId(), e.getName(), e.getType(), e.getInitialBalance(), e.getStatementDay(), e.getDueDay(), e.getCreatedAt(), e.getUpdatedAt(), e.isDeleted()))
 				.toList();
 
 		List<BudgetDto> budgets = budgetRepository.findModifiedAfter(userId, lastSyncTime).stream()
 				.map(e -> new BudgetDto(e.getId(), e.getCategory().getId(), e.getMonthlyLimit(), e.getCreatedAt(), e.getUpdatedAt(), e.isDeleted())).toList();
 
-		return new SyncPullResponse(ZonedDateTime.now(ZoneId.of("UTC")), txns, logs, people, loans, emis, categories, budgets, accounts);
+		List<CreditCardBillDto> ccBills = ccBillRepository.findModifiedAfter(userId, lastSyncTime).stream()
+				.map(e -> new CreditCardBillDto(e.getId(), e.getAccount().getId(), e.getBillingMonth(), e.getTotalBilledAmount(), e.getMinimumDue(), e.getAmountPaid(), e.getDueDate(), e.getStatus(), e.getCreatedAt(), e.getUpdatedAt(), e.isDeleted()))
+				.toList();
+
+		return new SyncPullResponse(ZonedDateTime.now(ZoneId.of("UTC")), txns, logs, people, loans, emis, categories, budgets, accounts, ccBills);
 	}
 
 	@Transactional
@@ -70,6 +75,9 @@ public class SyncService {
 		// Process Independent Entities FIRST (Parents)
 		List<UUID> processedAccountIds = processAccounts(request.accounts(), user);
 		accountRepository.flush();
+
+		List<UUID> processedCcBillIds = processCcBills(request.ccBills(), user);
+		ccBillRepository.flush();
 
 		List<UUID> processedCategoryIds = processCategories(request.categories(), user);
 		categoryRepository.flush();
@@ -104,6 +112,7 @@ public class SyncService {
 				processedEmiIds,
 				processedCategoryIds,
 				processedBudgetIds,
+				processedCcBillIds,
 				processedAccountIds
 		);
 	}
@@ -124,6 +133,8 @@ public class SyncService {
 					existing.setInitialBalance(dto.initialBalance());
 					existing.setDeleted(dto.isDeleted());
 					existing.setUpdatedAt(dto.updatedAt());
+					existing.setStatementDay(dto.statementDay());
+					existing.setDueDay(dto.dueDay());
 					toSave.add(existing);
 				}
 			} else {
@@ -136,11 +147,56 @@ public class SyncService {
 				newAcc.setCreatedAt(dto.createdAt());
 				newAcc.setUpdatedAt(dto.updatedAt());
 				newAcc.setDeleted(dto.isDeleted());
+				newAcc.setStatementDay(dto.statementDay());
+				newAcc.setDueDay(dto.dueDay());
 				toSave.add(newAcc);
 			}
 			processedIds.add(dto.id());
 		}
 		accountRepository.saveAll(toSave);
+		return processedIds;
+	}
+
+	private List<UUID> processCcBills(List<CreditCardBillDto> dtos, User user) {
+		if (dtos == null || dtos.isEmpty()) return List.of();
+		Map<UUID, CreditCardBill> existingMap = ccBillRepository.findAllById(dtos.stream().map(CreditCardBillDto::id).toList()).stream()
+				.collect(Collectors.toMap(CreditCardBill::getId, Function.identity()));
+		List<CreditCardBill> toSave = new ArrayList<>();
+		List<UUID> processedIds = new ArrayList<>();
+
+		for (CreditCardBillDto dto : dtos) {
+			CreditCardBill existing = existingMap.get(dto.id());
+			if (existing != null) {
+				if (dto.updatedAt().isAfter(existing.getUpdatedAt())) {
+					existing.setBillingMonth(dto.billingMonth());
+					existing.setTotalBilledAmount(dto.totalBilledAmount());
+					existing.setMinimumDue(dto.minimumDue());
+					existing.setAmountPaid(dto.amountPaid());
+					existing.setDueDate(dto.dueDate());
+					existing.setStatus(dto.status());
+					existing.setDeleted(dto.isDeleted());
+					existing.setUpdatedAt(dto.updatedAt());
+					toSave.add(existing);
+				}
+			} else {
+				CreditCardBill newBill = new CreditCardBill();
+				newBill.setId(dto.id());
+				newBill.setUser(user);
+				newBill.setAccount(accountRepository.getReferenceById(dto.accountId()));
+				newBill.setBillingMonth(dto.billingMonth());
+				newBill.setTotalBilledAmount(dto.totalBilledAmount());
+				newBill.setMinimumDue(dto.minimumDue());
+				newBill.setAmountPaid(dto.amountPaid());
+				newBill.setDueDate(dto.dueDate());
+				newBill.setStatus(dto.status());
+				newBill.setCreatedAt(dto.createdAt());
+				newBill.setUpdatedAt(dto.updatedAt());
+				newBill.setDeleted(dto.isDeleted());
+				toSave.add(newBill);
+			}
+			processedIds.add(dto.id());
+		}
+		ccBillRepository.saveAll(toSave);
 		return processedIds;
 	}
 
